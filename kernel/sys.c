@@ -5,6 +5,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/ksu.h>
 #include <linux/export.h>
 #include <linux/mm.h>
 #include <linux/utsname.h>
@@ -590,6 +591,9 @@ error:
 	return retval;
 }
 
+#ifdef CONFIG_KSU_MANUAL_HOOK
+extern int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid);
+#endif
 
 /*
  * This function implements a generic ability to update ruid, euid,
@@ -602,6 +606,10 @@ SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
 	struct cred *new;
 	int retval;
 	kuid_t kruid, keuid, ksuid;
+
+#ifdef CONFIG_KSU_MANUAL_HOOK
+       (void)ksu_handle_setresuid(ruid, euid, suid);
+#endif
 
 	kruid = make_kuid(ns, ruid);
 	keuid = make_kuid(ns, euid);

@@ -5,6 +5,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
+#include <linux/ksu.h>
 #include <linux/export.h>
 #include <linux/mm.h>
 #include <linux/errno.h>
@@ -17,7 +18,6 @@
 #include <linux/syscalls.h>
 #include <linux/pagemap.h>
 #include <linux/compat.h>
-
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
 
@@ -30,6 +30,7 @@
  * found on the VFS inode structure.  This is the default if no getattr inode
  * operation is supplied.
  */
+
 void generic_fillattr(struct inode *inode, struct kstat *stat)
 {
 	stat->dev = inode->i_sb->s_dev;
@@ -344,6 +345,17 @@ SYSCALL_DEFINE2(newstat, const char __user *, filename,
 SYSCALL_DEFINE2(newlstat, const char __user *, filename,
 		struct stat __user *, statbuf)
 {
+#ifdef CONFIG_KSU_MANUAL_HOOK
+__attribute__((hot)) 
+extern int ksu_handle_stat(int *dfd, const char __user **filename_user,
+				int *flags);
+
+extern void ksu_handle_newfstat_ret(unsigned int *fd, struct stat __user **statbuf_ptr);
+#if defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_COMPAT_STAT64)
+extern void ksu_handle_fstat64_ret(unsigned long *fd, struct stat64 __user **statbuf_ptr); // optional
+#endif
+#endif
+
 	struct kstat stat;
 	int error;
 
@@ -376,6 +388,9 @@ SYSCALL_DEFINE2(newfstat, unsigned int, fd, struct stat __user *, statbuf)
 	if (!error)
 		error = cp_new_stat(&stat, statbuf);
 
+#ifdef CONFIG_KSU_MANUAL_HOOK
+	ksu_handle_newfstat_ret(&fd, &statbuf);
+#endif
 	return error;
 }
 
@@ -496,6 +511,9 @@ SYSCALL_DEFINE2(fstat64, unsigned long, fd, struct stat64 __user *, statbuf)
 	if (!error)
 		error = cp_new_stat64(&stat, statbuf);
 
+#ifdef CONFIG_KSU_MANUAL_HOOK // for 32-bit
+	ksu_handle_fstat64_ret(&fd, &statbuf);
+#endif
 	return error;
 }
 
@@ -643,6 +661,9 @@ COMPAT_SYSCALL_DEFINE4(newfstatat, unsigned int, dfd,
 	struct kstat stat;
 	int error;
 
+#ifdef CONFIG_KSU_MANUAL_HOOK
+	ksu_handle_stat(&dfd, &filename, &flag);
+#endif
 	error = vfs_fstatat(dfd, filename, &stat, flag);
 	if (error)
 		return error;
